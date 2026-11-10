@@ -1,0 +1,65 @@
+#!/usr/bin/env bash
+# noah-set-domain midominio.com   -> prod en midominio.com (y www), pre en pre.midominio.com
+# noah-set-domain --apply         -> vuelve a escribir la configuración web con /etc/noah/domains
+# Usa Caddy (HTTPS automático). Si el servidor ya tiene nginx en los puertos 80/443, configura nginx + certbot.
+set -euo pipefail
+[ "$(id -u)" = 0 ] || { echo "Corre como root (sudo)."; exit 1; }
+
+if [ "${1:-}" != "--apply" ]; then
+  D="${1:?Uso: noah-set-domain midominio.com}"
+  D="${D#http://}"; D="${D#https://}"; D="${D%/}"
+  printf 'PROD_HOST=%s\nPRE_HOST=pre.%s\nWWW_HOST=www.%s\n' "$D" "$D" "$D" > /etc/noah/domains
+  echo "Antes de esto, en tu proveedor de dominio apunta $D, www.$D y pre.$D (registros A) a la IP de este servidor."
+fi
+. /etc/noah/domains
+WWW_HOST="${WWW_HOST:-}"
+
+WHO=$(ss -ltnpH '( sport = :80 or sport = :443 )' 2>/dev/null || true)
+
+if echo "$WHO" | grep -q nginx && ! echo "$WHO" | grep -q caddy; then
+  echo "Detecté nginx: configuro nginx + certbot."
+  apt-get install -y -qq certbot python3-certbot-nginx >/dev/null
+  site() {
+    printf 'server {\n  listen 80;\n  server_name %s;\n  client_max_body_size 15m;\n  location / {\n    proxy_pass http://127.0.0.1:%s;\n    proxy_set_header Host $host;\n    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;\n    proxy_set_header X-Forwarded-Proto $scheme;\n  }\n}\n' "$1" "$2"
+  }
+  { site "$PROD_HOST${WWW_HOST:+ $WWW_HOST}" 3100; site "$PRE_HOST" 3101; } > /etc/nginx/sites-available/noah
+  ln -sf /etc/nginx/sites-available/noah /etc/nginx/sites-enabled/noah
+  nginx -t && systemctl reload nginx
+  certbot --nginx --non-interactive --agree-tos --register-unsafely-without-email --redirect \
+    -d "$PROD_HOST" ${WWW_HOST:+-d "$WWW_HOST"} -d "$PRE_HOST" || echo "No se pudo sacar el certificado todavía; vuelve a correr: noah-set-domain --apply"
+else
+  if ! command -v caddy >/dev/null; then
+    if [ -n "$WHO" ]; then
+      echo "Algo que no es Caddy ni nginx usa los puertos 80/443:"; echo "$WHO"
+      echo "No toco nada. Configura un proxy hacia 127.0.0.1:3100 (prod) y 127.0.0.1:3101 (pre)."; exit 1
+    fi
+    echo "Instalando Caddy"
+    apt-get install -y -qq debian-keyring debian-archive-keyring apt-transport-https >/dev/null
+    curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | gpg --dearmor --yes -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
+    curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' > /etc/apt/sources.list.d/caddy-stable.list
+    apt-get update -qq && apt-get install -y -qq caddy >/dev/null
+  fi
+  {
+    echo "$PROD_HOST {"
+    echo "  encode gzip"
+    echo "  request_body { max_size 15MB }"
+    echo "  reverse_proxy 127.0.0.1:3100"
+    echo "}"
+    [ -n "$WWW_HOST" ] && printf '%s {\n  redir https://%s{uri} permanent\n}\n' "$WWW_HOST" "$PROD_HOST"
+    echo "$PRE_HOST {"
+    echo "  encode gzip"
+    echo "  request_body { max_size 15MB }"
+    echo "  reverse_proxy 127.0.0.1:3101"
+    echo "}"
+  } > /etc/caddy/noah.caddy
+  CF=/etc/caddy/Caddyfile
+  [ -f "$CF" ] || touch "$CF"
+  # quita la página de ejemplo de Caddy si es lo único que hay
+  if grep -q '^:80' "$CF" && [ "$(grep -cv '^\s*#\|^\s*$' "$CF")" -le 4 ]; then : > "$CF"; fi
+  grep -q 'import /etc/caddy/noah.caddy' "$CF" || echo 'import /etc/caddy/noah.caddy' >> "$CF"
+  caddy validate --config "$CF" --adapter caddyfile >/dev/null
+  systemctl enable --now caddy >/dev/null
+  systemctl reload caddy
+fi
+echo "Prod: https://$PROD_HOST"
+echo "Pre:  https://$PRE_HOST"

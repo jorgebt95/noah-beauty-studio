@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Panel de Sophia · Noah</title>
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#3B1219">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght,SOFT,WONK@9..144,300..900,0..100,0..1&family=Instrument+Serif:ital@0;1&family=Jost:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="/app.css">
+<style>
+  body { background: var(--crema); }
+  .ahead { background: var(--vino); color: var(--crema); border-radius: 0 0 26px 26px; padding-top: 20px; padding-bottom: 16px; }
+  .ahead .eyebrow { color: var(--caramelo); font-size: 11px; letter-spacing: .3em; }
+  .stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 14px; }
+  .stats div { background: var(--vino-2); border-radius: 14px; padding: 8px 12px; }
+  .stats b { font-family: var(--display); font-variation-settings: 'SOFT' 100; font-weight: 600; font-size: 22px; display: block; }
+  .stats span { font-size: 12px; color: var(--rosa); }
+  .atabs { display: flex; gap: 6px; overflow-x: auto; padding-top: 14px; padding-bottom: 4px; }
+  .atabs button { min-height: 42px; padding: 0 14px; border-radius: 999px; border: 0; background: #EADFD4; color: var(--vino); font-size: 14px; font-weight: 500; cursor: pointer; white-space: nowrap; display: inline-flex; align-items: center; gap: 6px; }
+  .atabs button[aria-selected="true"] { background: var(--vino); color: var(--crema); }
+  .badge { min-width: 20px; height: 20px; border-radius: 999px; background: var(--cereza); color: var(--leche); font-size: 12px; display: inline-flex; align-items: center; justify-content: center; padding: 0 6px; }
+  .acard { background: var(--leche); border-radius: 18px; padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; }
+  .actions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+  .actions button, .actions a { min-height: 44px; border-radius: 12px; border: 1px solid var(--borde); background: #fff; color: var(--vino); font-size: 14px; cursor: pointer; text-decoration: none; display: flex; align-items: center; justify-content: center; gap: 6px; }
+  .actions .primary { background: var(--cereza); color: var(--leche); border-color: var(--cereza); font-weight: 500; }
+  .status { font-size: 13px; }
+  .status.done { color: var(--ok); } .status.noshow, .status.cancelled { color: var(--cereza); }
+  .svcrow { display: grid; grid-template-columns: minmax(0, 1fr) 84px 84px; gap: 6px; align-items: center; }
+  .svcrow input { min-height: 44px; border-radius: 10px; border: 1px solid var(--borde); padding: 0 8px; font: 15px var(--body); color: var(--vino); width: 100%; background: #fff; }
+  .svcrow .warn { border-color: var(--caramelo); background: #FFF8EE; }
+  .ph { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+  .ph figure { margin: 0; position: relative; border-radius: 12px; overflow: hidden; aspect-ratio: 1; background: #fff; }
+  .ph img { width: 100%; height: 100%; object-fit: cover; }
+  .ph button { position: absolute; right: 4px; top: 4px; width: 32px; height: 32px; border-radius: 50%; border: 0; background: rgba(59,18,25,.85); color: #fff; cursor: pointer; }
+  .toast { position: fixed; left: 50%; bottom: max(20px, env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); background: var(--vino); color: var(--crema); padding: 12px 18px; border-radius: 14px; font-size: 14px; z-index: 20; max-width: 90vw; }
+</style>
+</head>
+<body>
+<div class="app">
+  <div id="envbar" class="envbar" hidden>Pre · ambiente de pruebas</div>
+  <main id="view"><p class="loading">Cargando…</p></main>
+</div>
+<div id="toast" class="toast" role="status" hidden></div>
+<script src="/admin.js"></script>
+</body>
+</html>

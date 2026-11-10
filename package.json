@@ -1,0 +1,23 @@
+{
+  "name": "noah-beauty-studio",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Sitio de citas, servicios, trabajos y Club Cereza de Noah Beauty Studio",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "NOAH_ENV=dev PORT=3000 DATA_DIR=./data ADMIN_PIN=1234 node server.js",
+    "test": "node test/smoke.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "better-sqlite3": "11.10.0",
+    "cookie-parser": "1.4.7",
+    "express": "4.21.2",
+    "multer": "2.0.2",
+    "node-ical": "0.20.1",
+    "tsdav": "2.1.5"
+  }
+}

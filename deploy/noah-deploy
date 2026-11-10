@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+# noah-deploy [pre|prod|all] [--force]
+# Trae de GitHub la rama del ambiente (pre -> "pre", prod -> "main"); si hay cambios los instala,
+# reinicia el servicio y, si la app no responde, regresa a la versión anterior.
+set -uo pipefail
+TARGET="${1:-all}"; FORCE="${2:-}"
+log() { echo "[noah-deploy] $*"; }
+
+deploy() {
+  local ENVN=$1 BR DIR PORT CUR NEW
+  BR=$([ "$ENVN" = prod ] && echo main || echo pre)
+  DIR=/opt/noah/$ENVN/app
+  PORT=$(grep -E '^PORT=' /etc/noah/$ENVN.env | cut -d= -f2)
+  G() { sudo -u noah git -C "$DIR" "$@"; }
+  G fetch -q origin "$BR" || { log "$ENVN: no pude leer GitHub"; return 1; }
+  CUR=$(G rev-parse HEAD); NEW=$(G rev-parse "origin/$BR")
+  [ "$CUR" = "$NEW" ] && [ "$FORCE" != "--force" ] && return 0
+  log "$ENVN: ${CUR:0:7} -> ${NEW:0:7}"
+  G reset -q --hard "origin/$BR"
+  install_deps() {
+    if ! cmp -s "$DIR/package-lock.json" "$DIR/.deployed-lock"; then
+      (cd "$DIR" && sudo -u noah npm ci --omit=dev --no-audit --no-fund >/dev/null) && sudo -u noah cp "$DIR/package-lock.json" "$DIR/.deployed-lock"
+    fi
+  }
+  install_deps
+  systemctl restart "noah@$ENVN"
+  for _ in 1 2 3 4 5 6 7 8 9 10; do
+    sleep 1
+    if curl -fsS "http://127.0.0.1:$PORT/api/health" >/dev/null 2>&1; then log "$ENVN: listo en ${NEW:0:7}"; return 0; fi
+  done
+  log "$ENVN: la versión nueva no arrancó, regreso a ${CUR:0:7}"
+  G reset -q --hard "$CUR"
+  install_deps
+  systemctl restart "noah@$ENVN"
+  return 1
+}
+
+case "$TARGET" in
+  pre|prod) deploy "$TARGET" ;;
+  all) deploy pre; deploy prod ;;
+  *) echo "Uso: noah-deploy [pre|prod|all] [--force]"; exit 1 ;;
+esac
