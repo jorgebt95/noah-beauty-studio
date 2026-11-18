@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Instalación única de Noah Beauty Studio en el VPS (Ubuntu/Debian). Se puede volver a correr sin problema.
-# Deja dos ambientes: pre (rama "pre", puerto 3101) y prod (rama "main", puerto 3100),
+# Deja dos ambientes: pre (rama "pre") y prod (rama "main"), cada uno en un puerto libre (desde 4720 y 4710),
 # con despliegue automático cada minuto y respaldo diario de la base de datos de prod.
 set -euo pipefail
 
@@ -49,12 +49,35 @@ for ENVN in pre prod; do
 done
 
 say "Configuración de cada ambiente"
+# Puerto libre a partir de $1 (sin chocar con otras apps del VPS ni con el otro ambiente de Noah)
+free_port() {
+  local p=$1
+  while ss -ltnH "( sport = :$p )" | grep -q . || grep -qs "^PORT=$p\$" /etc/noah/pre.env /etc/noah/prod.env; do p=$((p + 1)); done
+  echo "$p"
+}
+# ¿El puerto está libre o lo usa este mismo ambiente de Noah?
+port_ok() {
+  local ENVN=$1 P=$2 pids main
+  pids=$(ss -ltnpH "( sport = :$P )" | grep -o 'pid=[0-9]*' | cut -d= -f2 | sort -u)
+  [ -z "$pids" ] && return 0
+  main=$(systemctl show -p MainPID --value "noah@$ENVN" 2>/dev/null || echo 0)
+  for pid in $pids; do [ "$pid" = "$main" ] || return 1; done
+  return 0
+}
 NEW_PINS=""
 for ENVN in pre prod; do
   F=/etc/noah/$ENVN.env
-  if [ ! -f "$F" ]; then
+  if [ -f "$F" ]; then
+    P=$(grep -E '^PORT=' "$F" | cut -d= -f2)
+    if ! port_ok "$ENVN" "$P"; then
+      sed -i "s/^PORT=.*/PORT=__libre__/" "$F"
+      NP=$(free_port "$([ "$ENVN" = prod ] && echo 4710 || echo 4720)")
+      sed -i "s/^PORT=.*/PORT=$NP/" "$F"
+      echo "  $ENVN: el puerto $P ya lo usa otra app del servidor; Noah usará el $NP"
+    fi
+  else
     PIN=$(shuf -i 1000-9999 -n 1)
-    PORT=$([ "$ENVN" = prod ] && echo 3100 || echo 3101)
+    PORT=$(free_port "$([ "$ENVN" = prod ] && echo 4710 || echo 4720)")
     cat > "$F" <<EOF
 NOAH_ENV=$ENVN
 PORT=$PORT
@@ -153,8 +176,8 @@ sleep 3
 . /etc/noah/domains
 say "Listo"
 for ENVN in prod pre; do
-  P=$([ "$ENVN" = prod ] && echo 3100 || echo 3101)
-  if curl -fsS "http://127.0.0.1:$P/api/health" >/dev/null; then echo "  $ENVN: corriendo"; else echo "  $ENVN: NO responde (revisa: journalctl -u noah@$ENVN -n 50)"; fi
+  P=$(grep -E '^PORT=' "/etc/noah/$ENVN.env" | cut -d= -f2)
+  if curl -fsS "http://127.0.0.1:$P/api/health" 2>/dev/null | grep -q "\"env\":\"$ENVN\""; then echo "  $ENVN: corriendo en el puerto $P"; else echo "  $ENVN: NO responde (revisa: journalctl -u noah@$ENVN -n 50)"; fi
 done
 echo
 echo "  Prod (clientas): https://$PROD_HOST"

@@ -26,7 +26,7 @@ deploy() {
   systemctl restart "noah@$ENVN"
   for _ in 1 2 3 4 5 6 7 8 9 10; do
     sleep 1
-    if curl -fsS "http://127.0.0.1:$PORT/api/health" >/dev/null 2>&1; then log "$ENVN: listo en ${NEW:0:7}"; return 0; fi
+    if curl -fsS "http://127.0.0.1:$PORT/api/health" 2>/dev/null | grep -q "\"env\":\"$ENVN\""; then log "$ENVN: listo en ${NEW:0:7}"; return 0; fi
   done
   log "$ENVN: la versión nueva no arrancó, regreso a ${CUR:0:7}"
   G reset -q --hard "$CUR"

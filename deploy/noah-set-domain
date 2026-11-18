@@ -13,6 +13,8 @@ if [ "${1:-}" != "--apply" ]; then
 fi
 . /etc/noah/domains
 WWW_HOST="${WWW_HOST:-}"
+PROD_PORT=$(grep -E '^PORT=' /etc/noah/prod.env | cut -d= -f2)
+PRE_PORT=$(grep -E '^PORT=' /etc/noah/pre.env | cut -d= -f2)
 
 WHO=$(ss -ltnpH '( sport = :80 or sport = :443 )' 2>/dev/null || true)
 
@@ -22,7 +24,7 @@ if echo "$WHO" | grep -q nginx && ! echo "$WHO" | grep -q caddy; then
   site() {
     printf 'server {\n  listen 80;\n  server_name %s;\n  client_max_body_size 15m;\n  location / {\n    proxy_pass http://127.0.0.1:%s;\n    proxy_set_header Host $host;\n    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;\n    proxy_set_header X-Forwarded-Proto $scheme;\n  }\n}\n' "$1" "$2"
   }
-  { site "$PROD_HOST${WWW_HOST:+ $WWW_HOST}" 3100; site "$PRE_HOST" 3101; } > /etc/nginx/sites-available/noah
+  { site "$PROD_HOST${WWW_HOST:+ $WWW_HOST}" "$PROD_PORT"; site "$PRE_HOST" "$PRE_PORT"; } > /etc/nginx/sites-available/noah
   ln -sf /etc/nginx/sites-available/noah /etc/nginx/sites-enabled/noah
   nginx -t && systemctl reload nginx
   certbot --nginx --non-interactive --agree-tos --register-unsafely-without-email --redirect \
@@ -31,7 +33,7 @@ else
   if ! command -v caddy >/dev/null; then
     if [ -n "$WHO" ]; then
       echo "Algo que no es Caddy ni nginx usa los puertos 80/443:"; echo "$WHO"
-      echo "No toco nada. Configura un proxy hacia 127.0.0.1:3100 (prod) y 127.0.0.1:3101 (pre)."; exit 1
+      echo "No toco nada. Configura un proxy hacia 127.0.0.1:$PROD_PORT (prod) y 127.0.0.1:$PRE_PORT (pre)."; exit 1
     fi
     echo "Instalando Caddy"
     apt-get install -y -qq debian-keyring debian-archive-keyring apt-transport-https >/dev/null
@@ -43,9 +45,9 @@ else
     printf '%s {\n\tencode gzip\n\trequest_body {\n\t\tmax_size 15MB\n\t}\n\treverse_proxy 127.0.0.1:%s\n}\n\n' "$1" "$2"
   }
   {
-    site "$PROD_HOST" 3100
+    site "$PROD_HOST" "$PROD_PORT"
     if [ -n "$WWW_HOST" ]; then printf '%s {\n\tredir https://%s{uri} permanent\n}\n\n' "$WWW_HOST" "$PROD_HOST"; fi
-    site "$PRE_HOST" 3101
+    site "$PRE_HOST" "$PRE_PORT"
   } > /etc/caddy/noah.caddy
   CF=/etc/caddy/Caddyfile
   [ -f "$CF" ] || touch "$CF"

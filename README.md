@@ -10,8 +10,8 @@ Sitio de citas, servicios, trabajos y tarjeta Club Cereza de Noah Beauty Studio,
 
 | Ambiente | Rama   | Puerto | Datos                  |
 |----------|--------|--------|------------------------|
-| pre      | `pre`  | 3101   | `/var/lib/noah/pre`    |
-| prod     | `main` | 3100   | `/var/lib/noah/prod`   |
+| pre      | `pre`  | libre desde 4720 (`/etc/noah/pre.env`) | `/var/lib/noah/pre`    |
+| prod     | `main` | libre desde 4710 (`/etc/noah/prod.env`) | `/var/lib/noah/prod`   |
 
 El VPS revisa GitHub cada minuto (`noah-deploy.timer`). Un cambio se sube primero a `pre`; cuando se aprueba, se pasa a `main`:
 
