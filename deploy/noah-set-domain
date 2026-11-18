@@ -39,25 +39,25 @@ else
     curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' > /etc/apt/sources.list.d/caddy-stable.list
     apt-get update -qq && apt-get install -y -qq caddy >/dev/null
   fi
+  site() {
+    printf '%s {\n\tencode gzip\n\trequest_body {\n\t\tmax_size 15MB\n\t}\n\treverse_proxy 127.0.0.1:%s\n}\n\n' "$1" "$2"
+  }
   {
-    echo "$PROD_HOST {"
-    echo "  encode gzip"
-    echo "  request_body { max_size 15MB }"
-    echo "  reverse_proxy 127.0.0.1:3100"
-    echo "}"
-    [ -n "$WWW_HOST" ] && printf '%s {\n  redir https://%s{uri} permanent\n}\n' "$WWW_HOST" "$PROD_HOST"
-    echo "$PRE_HOST {"
-    echo "  encode gzip"
-    echo "  request_body { max_size 15MB }"
-    echo "  reverse_proxy 127.0.0.1:3101"
-    echo "}"
+    site "$PROD_HOST" 3100
+    if [ -n "$WWW_HOST" ]; then printf '%s {\n\tredir https://%s{uri} permanent\n}\n\n' "$WWW_HOST" "$PROD_HOST"; fi
+    site "$PRE_HOST" 3101
   } > /etc/caddy/noah.caddy
   CF=/etc/caddy/Caddyfile
   [ -f "$CF" ] || touch "$CF"
+  cp -a "$CF" "$CF.antes-de-noah"
   # quita la página de ejemplo de Caddy si es lo único que hay
   if grep -q '^:80' "$CF" && [ "$(grep -cv '^\s*#\|^\s*$' "$CF")" -le 4 ]; then : > "$CF"; fi
-  grep -q 'import /etc/caddy/noah.caddy' "$CF" || echo 'import /etc/caddy/noah.caddy' >> "$CF"
-  caddy validate --config "$CF" --adapter caddyfile >/dev/null
+  grep -q 'import /etc/caddy/noah.caddy' "$CF" || printf '\nimport /etc/caddy/noah.caddy\n' >> "$CF"
+  if ! caddy validate --config "$CF" --adapter caddyfile >/dev/null 2>/tmp/noah-caddy.err; then
+    cp -a "$CF.antes-de-noah" "$CF"
+    echo "La configuración de Caddy no pasó la validación; dejé tu Caddyfile como estaba."
+    cat /tmp/noah-caddy.err; exit 1
+  fi
   systemctl enable --now caddy >/dev/null
   systemctl reload caddy
 fi
