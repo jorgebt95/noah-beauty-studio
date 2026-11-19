@@ -234,22 +234,54 @@ async function svc() {
 }
 
 // ---------- Fotos ----------
+// Reduce la foto en el celular antes de subirla (máx. 1600 px, JPEG) para que la galería cargue rápido.
+function shrink(file, max = 1600) {
+  return new Promise(resolve => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      const k = Math.min(1, max / Math.max(img.naturalWidth, img.naturalHeight));
+      const c = document.createElement('canvas');
+      c.width = Math.round(img.naturalWidth * k); c.height = Math.round(img.naturalHeight * k);
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      URL.revokeObjectURL(url);
+      c.toBlob(b => resolve(b || file), 'image/jpeg', 0.85);
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); resolve(file); };
+    img.src = url;
+  });
+}
 async function fot() {
   const list = await api('/api/photos');
+  const CATS = { unas: 'Uñas', pestanas: 'Pestañas', cejas: 'Cejas' };
   body().innerHTML = `<form id="uf" class="acard stack">
-      <div class="field"><label for="file">Foto</label><input id="file" type="file" accept="image/*" class="input" style="padding-top:12px" required></div>
+      <p style="margin:0;font-weight:600">Subir fotos a Trabajos</p>
+      <div class="field"><label for="file">Elige una o varias fotos</label><input id="file" type="file" accept="image/*" multiple class="input" style="padding-top:12px" required></div>
       <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px">
-        <div class="field"><label for="cat">Tipo</label><select id="cat" class="input"><option value="unas">Uñas</option><option value="pestanas">Pestañas</option><option value="cejas">Cejas</option></select></div>
-        <div class="field"><label for="tag">Etiqueta</label><input id="tag" class="input" placeholder="French fino"></div>
+        <div class="field"><label for="cat">Tipo</label><select id="cat" class="input">${Object.entries(CATS).map(([k, l]) => `<option value="${k}">${l}</option>`).join('')}</select></div>
+        <div class="field"><label for="tag">Etiqueta (opcional)</label><input id="tag" class="input" placeholder="French fino"></div>
       </div>
-      <button class="btn dark" type="submit" id="up">Subir a Trabajos</button>
+      <button class="btn dark" type="submit" id="up">Subir</button>
+      <p class="small muted" style="margin:0">Las fotos se ajustan solas de tamaño. Aparecen al momento en la sección Trabajos de la página.</p>
     </form>
-    <div class="ph">${list.map(p => `<figure><img src="/uploads/${encodeURIComponent(p.file)}" alt="${esc(p.tag)}" loading="lazy"><button type="button" data-del="${p.id}" aria-label="Borrar foto">✕</button></figure>`).join('')}</div>`;
+    <p style="margin:6px 0 0;font-weight:600">${list.length} ${list.length === 1 ? 'foto publicada' : 'fotos publicadas'}</p>
+    <div class="ph">${list.map(p => `<figure><img src="/uploads/${encodeURIComponent(p.file)}" alt="${esc(p.tag || CATS[p.cat] || '')}" loading="lazy"><button type="button" data-del="${p.id}" aria-label="Borrar foto">✕</button></figure>`).join('')}</div>`;
   $('#uf').addEventListener('submit', async e => {
     e.preventDefault();
-    const fd = new FormData(); fd.append('photo', $('#file').files[0]); fd.append('cat', $('#cat').value); fd.append('tag', $('#tag').value);
-    $('#up').disabled = true; $('#up').textContent = 'Subiendo…';
-    try { await api('/api/admin/photos', { body: fd }); toast('Foto subida'); fot(); } catch (ex) { toast(ex.message); $('#up').disabled = false; $('#up').textContent = 'Subir a Trabajos'; }
+    const files = [...$('#file').files];
+    if (!files.length) return toast('Elige al menos una foto');
+    const up = $('#up'); up.disabled = true;
+    let ok = 0;
+    for (const [i, f] of files.entries()) {
+      up.textContent = `Subiendo ${i + 1} de ${files.length}…`;
+      const blob = await shrink(f);
+      const fd = new FormData();
+      fd.append('photo', blob, (f.name || 'foto').replace(/\.[^.]+$/, '') + '.jpg');
+      fd.append('cat', $('#cat').value); fd.append('tag', $('#tag').value);
+      try { await api('/api/admin/photos', { body: fd }); ok++; } catch (ex) { toast(ex.message); }
+    }
+    toast(ok === files.length ? (ok === 1 ? 'Foto subida' : `${ok} fotos subidas`) : `Se subieron ${ok} de ${files.length}`);
+    fot();
   });
   body().querySelectorAll('[data-del]').forEach(b => b.addEventListener('click', async () => {
     if (b.dataset.sure !== '1') { b.dataset.sure = '1'; b.textContent = '¿?'; toast('Toca otra vez para borrar'); return; }

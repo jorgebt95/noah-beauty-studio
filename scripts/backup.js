@@ -15,6 +15,12 @@ db.backup(path.join(out, `noah-${stamp}.db`))
       const p = path.join(out, f);
       if (/^noah-\d{4}-\d{2}-\d{2}\.db$/.test(f) && fs.statSync(p).mtimeMs < limit) fs.unlinkSync(p);
     }
+    // copia las fotos nuevas (las que ya están respaldadas no se vuelven a copiar)
+    const up = path.join(DATA_DIR, 'uploads'), dst = path.join(out, 'uploads');
+    if (fs.existsSync(up)) {
+      fs.mkdirSync(dst, { recursive: true });
+      for (const f of fs.readdirSync(up)) if (!fs.existsSync(path.join(dst, f))) fs.copyFileSync(path.join(up, f), path.join(dst, f));
+    }
     console.log('Respaldo listo:', stamp);
   })
   .catch(e => { console.error(e); process.exit(1); });
